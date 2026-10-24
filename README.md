@@ -204,7 +204,6 @@ FROM
 ) as t1
 WHERE rank=1
 ```
-Medium to Hard (5 Questions)
 11. Identify the least selling product in each country for each year based on total units sold.
 ```sql
 SELECT 
@@ -275,6 +274,90 @@ JOIN category AS c ON p.category_id = c.category_id
 WHERE w.claim_date >=  CURRENT_DATE - INTERVAL '2 YEAR'
 GROUP BY 1;
 ```
+16. Determine the percentage chance of receiving warranty claims after each purchase for each country.
+```sql
+SELECT 
+  	country,
+	total_unit_sold,  
+	total_claim,
+	COALESCE(total_claim::numeric / total_unit_sold::numeric * 100,0)
+	AS risk
+FROM
+(
+	SELECT 
+		st.country,
+		SUM(s.quantity) AS total_unit_sold,
+		COUNT(w.claim_id) as total_claim
+	FROM sales as s
+	JOIN
+	stores as st ON s.store_id = st.store_id
+	LEFT JOIN
+	warranty as w ON w.sale_id = s.sale_id
+	GROUP BY 1
+	ORDER BY 3 DESC
+) t1
+```
+-- 17. Analyze the year-by-year growth ratio for each store.
+```sql
+WITH yearly_sales
+AS
+(
+	SELECT
+		s.store_id,
+		st.store_name,
+		EXTRACT(YEAR FROM sale_date) AS year,
+		SUM(s.quantity * p.price) as total_sale
+	FROM sales AS s
+	JOIN
+	products as p
+	ON s.product_id = p.product_id
+	JOIN stores as st
+	ON st.store_id = s.store_id
+	GROUP BY 1,2,3
+	ORDER BY 2,3
+),
+growth_ratio
+AS
+(
+SELECT
+	store_name,
+	year,
+	LAG(total_sale,1) OVER(PARTITION BY store_name ORDER BY year) as last_year_sale,
+	total_sale as current_year_sale
+FROM yearly_sales
+)
+SELECT
+	store_name,
+	year,
+	last_year_sale,
+    current_year_sale,
+   ROUND((current_year_sale - last_year_sale)::numeric/last_year_sale::numeric *100,3) as growth_ratio
+FROM growth_ratio
+WHERE 
+	last_year_sale IS NOT NULL
+	AND
+	YEAR <> EXTRACT(YEAR FROM CURRENT_DATE);
+  ```
+18. Calculate the correlation between product price and warranty claims for products sold in the last five years, segmented by price range.
+```sql
+SELECT 
+	CASE
+	 	WHEN p.price < 500 THEN 'Less Expensive Product'
+		WHEN p.price BETWEEN 500 AND 1000 THEN 'Mid Range Product'
+		ELSE 'Expensive Product'
+		END AS product_segment,
+	COUNT(w.claim_id) as total_claim
+FROM warranty as w
+LEFT JOIN
+sales as s
+ON w.sale_id=s.sale_id
+JOIN
+products as p
+ON p.product_id=s.product_id
+WHERE claim_date >= CURRENT_DATE - INTERVAL '5 year'
+GROUP BY 1;
+```
+
 
 ## 🛠 SQL Concepts Used
 
